@@ -3,8 +3,12 @@
 #pragma comment(lib, "wtsapi32.lib")
 #include <iostream>
 #include <string>
+#include <cstdarg>
+
 #include <cstring>
+
 #include <ctime>
+
 #include <vector>
 #include <filesystem>
 #include <atomic>
@@ -45,6 +49,7 @@ static bool LaunchProcess(const std::string& cmd,
     HANDLE  hStdOut = NULL,
     HANDLE  hStdErr = NULL)
 {
+
     std::vector<char> buf(cmd.begin(), cmd.end());
     buf.push_back('\0');
 
@@ -185,11 +190,13 @@ static void EndSession()
     {
         std::lock_guard<std::mutex> lock(g_segmentMutex);
         for (size_t i = 0; i < allSegments.size(); ++i) {
+
             std::chrono::system_clock::time_point segStart;
             if (i < g_segmentStartTimes.size()) {
                 segStart = g_segmentStartTimes[i];
             }
             else {
+
                 auto ftime = fs::last_write_time(allSegments[i]);
                 auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
                     ftime - fs::file_time_type::clock::now() +
@@ -289,9 +296,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-static DWORD WINAPI MessageLoopThread(LPVOID)
+static DWORD WINAPI MessageLoopThread(LPVOID lpParam)
 {
-    g_hSessionWnd = CreateWindowExA(0, "SessionMonitorClass", "", 0,
+    ATOM sessionClass = static_cast<ATOM>(reinterpret_cast<uintptr_t>(lpParam));
+
+    g_hSessionWnd = CreateWindowExW(0, MAKEINTATOM(sessionClass), L"", 0,
         0, 0, 0, 0, HWND_MESSAGE, NULL, g_hInstance, NULL);
     if (!g_hSessionWnd) {
         std::cerr << "[Error] Failed to create session monitor window ("
@@ -315,6 +324,7 @@ static HWND g_hRawInputWnd = NULL;
 static LRESULT CALLBACK RawInputWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (msg == WM_INPUT && g_isLocked && g_isRecording && !g_isTriggered) {
+
         std::cout << "[Trigger] Physical activity detected on locked machine!\n";
         g_isTriggered = true;
         g_triggerTime = std::chrono::system_clock::now();
@@ -324,6 +334,7 @@ static LRESULT CALLBACK RawInputWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
 
 static DWORD WINAPI MonitorThread(LPVOID)
 {
+
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = RawInputWndProc;
@@ -349,10 +360,12 @@ static DWORD WINAPI MonitorThread(LPVOID)
 
     RAWINPUTDEVICE rid[2] = {};
     rid[0].usUsagePage = 0x01;
+
     rid[0].usUsage = 0x02;
     rid[0].dwFlags = RIDEV_INPUTSINK;
     rid[0].hwndTarget = g_hRawInputWnd;
     rid[1].usUsagePage = 0x01;
+
     rid[1].usUsage = 0x06;
     rid[1].dwFlags = RIDEV_INPUTSINK;
     rid[1].hwndTarget = g_hRawInputWnd;
@@ -380,9 +393,16 @@ int main()
     wc.lpfnWndProc = WndProc;
     wc.hInstance = g_hInstance;
     wc.lpszClassName = "SessionMonitorClass";
-    RegisterClassExA(&wc);
+    ATOM sessionClass = RegisterClassExA(&wc);
+    if (!sessionClass) {
+        std::cerr << "[Error] Failed to register window class ("
+            << GetLastError() << ")\n";
+        return 1;
+    }
 
-    HANDLE hMsgLoop = CreateThread(NULL, 0, MessageLoopThread, NULL, 0, NULL);
+    HANDLE hMsgLoop = CreateThread(NULL, 0, MessageLoopThread,
+        reinterpret_cast<LPVOID>(static_cast<uintptr_t>(sessionClass)),
+        0, NULL);
     HANDLE hSegWatcher = CreateThread(NULL, 0, SegmentWatcherThread, NULL, 0, NULL);
     g_hMonitorThread = CreateThread(NULL, 0, MonitorThread, NULL, 0, NULL);
 
