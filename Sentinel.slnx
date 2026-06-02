@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="Sentinel/Sentinel.vcxproj" />
+  <Project Path="Sentinel/Sentinel.vcxproj" Id="53735c71-2759-4f8e-b967-1a515b142fc9" />
 </Solution>
